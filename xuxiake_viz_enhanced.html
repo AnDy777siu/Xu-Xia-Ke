@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>《徐霞客游记》数字人文 · 增强版</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<style>
+  :root {
+    --bg:#f6f7fb; --fg:#1f2937; --muted:#6b7280; --brand:#1d4ed8; --panel:#ffffff;
+  }
+  html, body { height: 100%; }
+  body { margin:0; font-family: "Noto Serif SC","Source Han Serif SC",serif; background:var(--bg); color:var(--fg);}
+  header { background:linear-gradient(90deg,#0f2027,#203a43,#2c5364); color:#fff; padding:1rem 1rem; position:sticky; top:0; z-index:10; }
+  .container { max-width:1200px; margin:0 auto; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+  h1 { margin:.2rem 0; font-size:1.4rem; }
+  .lang-toggle button { margin-left:.4rem; padding:.35rem .6rem; border-radius:8px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
+  .lang-toggle button.active { background:#fff; color:#0f2027; }
+  main { padding:1rem; }
+  .grid { display:grid; grid-template-columns: 1.6fr 1fr; gap:16px; }
+  .card { background:var(--panel); border-radius:14px; box-shadow:0 10px 24px rgba(0,0,0,.06); padding:1rem; }
+  #map { height:560px; border-radius:12px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:.3rem 0 .7rem; }
+  .pill { background:#eef2ff; color:#1d4ed8; border:1px solid #dbeafe; padding:.2rem .5rem; border-radius:999px; font-size:.85rem; }
+  .searchbox { display:flex; gap:.5rem; }
+  .searchbox input { flex:1; padding:.55rem .7rem; border:1px solid #e5e7eb; border-radius:10px; }
+  .btn { padding:.5rem .7rem; border:1px solid #e5e7eb; border-radius:10px; background:#fff; cursor:pointer; }
+  .btn.primary { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+  .result { border:1px solid #e5e7eb; border-radius:10px; padding:.6rem; margin:.4rem 0; }
+  .muted { color:var(--muted); }
+  .sidebar { background:var(--panel); border-radius:14px; box-shadow:0 10px 24px rgba(0,0,0,.06); padding:1rem; }
+  .timeline { position:relative; padding-left:18px; }
+  .timeline::before { content:""; position:absolute; left:8px; top:0; bottom:0; width:2px; background:#e5e7eb; }
+  .titem { position:relative; margin:0 0 10px; padding-left:14px; }
+  .titem::before { content:""; position:absolute; left:-2px; top:.35rem; width:10px; height:10px; background:#3b82f6; border-radius:50%; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:6px; padding:.05rem .35rem; }
+  .badge { background:#fde68a; color:#573c00; padding:.05rem .35rem; border-radius:6px; }
+  footer { text-align:center; color:var(--muted); padding:1rem; }
+  .section { margin-top:1rem; }
+  .checkboxes label { margin-right:.6rem; display:inline-flex; align-items:center; gap:.25rem; }
+</style>
+</head>
+<body>
+<header>
+  <div class="container row">
+    <div>
+      <h1 data-i18n="title">《徐霞客游记》数字人文 · 增强版</h1>
+      <div class="muted" data-i18n="subtitle">地图 · 文本 · 时间轴 · 检索 · 展示模式</div>
+    </div>
+    <div class="lang-toggle">
+      <span class="muted">语言</span>
+      <button id="lang-zh" class="active">中文</button>
+      <button id="lang-en">English</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="grid">
+    <div class="card">
+      <div class="controls">
+        <span class="pill" data-i18n="map_label">交互式地图</span>
+        <div class="checkboxes">
+          <label><input type="checkbox" class="groupchk" value="华东 East China" checked> <span>华东</span></label>
+          <label><input type="checkbox" class="groupchk" value="华中 Central China" checked> <span>华中</span></label>
+          <label><input type="checkbox" class="groupchk" value="华北 North China" checked> <span>华北</span></label>
+          <label><input type="checkbox" class="groupchk" value="西南 Southwest" checked> <span>西南</span></label>
+        </div>
+        <button id="btn-animate" class="btn" data-i18n="btn_animate">路线动画</button>
+        <button id="btn-present" class="btn" data-i18n="btn_present">演示模式</button>
+        <button id="btn-reset" class="btn" data-i18n="btn_reset">重置视图</button>
+      </div>
+      <div id="map"></div>
+      <div class="muted small section" data-i18n="map_hint">提示：点标记看原文片段；勾选区域筛选；“路线动画”会按序绘制主要行程。</div>
+    </div>
+
+    <aside class="sidebar">
+      <div class="section">
+        <div class="pill" data-i18n="search_label">片段检索</div>
+        <div class="searchbox" style="margin-top:.5rem;">
+          <input id="q" type="text" placeholder="石梁/国清寺/飞瀑/鸡足山 …">
+          <button id="btn-search" class="btn primary" data-i18n="btn_search">检索</button>
+        </div>
+        <div id="results" class="section"></div>
+      </div>
+
+      <div class="section">
+        <div class="pill" data-i18n="timeline_label">时间轴</div>
+        <div id="timeline" class="timeline section"></div>
+      </div>
+
+      <div class="section">
+        <div class="pill" data-i18n="about_label">关于本项目</div>
+        <p class="muted" data-i18n="about_text">
+          本页为课程演示用 Demo。文本片段来自《徐霞客游记》（学术用途），地图基于 OpenStreetMap。
+          后续可接入 NLP 地名抽取、自动配准与 StoryMaps。
+        </p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="card section">
+    <div class="pill" data-i18n="ext_label">可扩展方向</div>
+    <div class="muted" data-i18n="ext_text">
+      1) NLP 地名抽取 2) 自动经纬度配准 3) 游程重建与里程估算 4) 主题/情感可视化 5) 媒体画廊与朗读
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="container small muted" data-i18n="footer">
+    © 2025 数字人文项目组 · 数据来源：《徐霞客游记》（中华书局·朱惠荣整理本）；仅用于教学演示。
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+// ====== Embedded Data ======
+const PLACE_DATA = [{"name": "宁海", "en": "Ninghai", "group": "华东 East China", "coords": [29.29, 121.43], "snippets": ["念徐霞客》的专文，是对徐霞客在旅游方面的最好的肯定。《游天台山日记》为《徐霞客游记》的首篇，万历四十一年三月的最末一天，即公元1613年5月19日，徐霞客从浙江宁海出西门，第一句话就是：“云散日朗，人意山光，俱有喜态。”天时、地利、人和具备，展现出祖国山河的美好画卷，也预示着祖国旅游事业发展的美好前景。他珍惜晚年，与一", "游览天台山和雁宕山，同行者有僧人莲舟。《游天台山日记》就是他这次游天台山留下来的游记。天台山在浙江天台县，为我国佛教天台宗的发源地。徐霞客于三月的最末一天自宁海县城起行，四月初一日进入天台县境，四月初九日离开天台山。他登华顶峰，观石梁飞瀑，欣赏断桥三曲瀑布及珠帘水，游寒岩、明岩、鸣玉涧，眺览琼台、双阙，登赤城，沿途到了"]}, {"name": "天台山", "en": "Tiantai Mt.", "group": "华东 East China", "coords": [29.13, 121.03], "snippets": ["总目录徐霞客游记（一）徐霞客游记（二）徐霞客游记（三）徐霞客游记（四）注：本书“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记", "游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记返回总目录前 言我们在这里向大家介绍我国古", "在乾隆刻本第一册上。天台山，又省称台山，在今浙江天台县北，有华顶、赤城、琼台、桃源、寒岩、明岩诸胜景，以石梁飞瀑最著名。天台山为佛教天台宗的发祥地，有隋朝创建的国清寺。(2)台州府：省称台郡，治临海，即今浙江临海市。(3)癸丑：明万历四十一年(1613)。晦(huì)：中历每月的末一天。癸丑为明代万历四十一年，这年的", "音，山间的景色，反复创新变化着，翠绿的树丛中山间的杜鹃花映日绽放，让人忘却了攀登跋涉的辛苦。又行十五里，在筋竹庵吃饭。山顶到处种着麦子。从筋竹岭往南行，就是通向国清寺的大路。恰好有个国清寺的僧人云峰一同吃饭，说起从此地到石梁，山势险峻，路途漫长，带着行李不方便，不如带着轻装前往，而把沉重的担子挑到国清寺中等待。我同意了他的建"]}, {"name": "雁荡山", "en": "Yandang Mt.", "group": "华东 East China", "coords": [28.9, 120.7], "snippets": ["霞客游记（一）徐霞客游记（二）徐霞客游记（三）徐霞客游记（四）注：本书“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前", "彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记返回总目录前 言我们在这里向大家介绍我国古代杰出的旅行家和地理", "奇特的地方。游雁宕山日记(1)浙江温州府(2)【题解】《游雁宕山日记》是万历四十一年(1613)徐霞客第一次游雁宕山的游记。雁宕山今作雁荡山，在浙江乐清市，为我国著名风景名胜区。徐霞客游天台山后，从黄岩进入雁山。四月十一日登灵峰洞，十二日游灵岩，盛赞龙鼻洞和天聪洞的奇绝，十三日观赏大龙湫飞瀑，至此，", "在写景方面的高超技巧。自初九日别台山，初十日抵黄岩(3)。日已西，出南门，步行三十里(4)，宿于八岙(5)。【注释】(1)雁宕山：省称雁山，今作雁荡山。“宕”同“荡”，为积水长草的洼地。山中有荡，据传秋雁归时多宿此，故名。雁宕山在浙江温州市辖境，蟠跨瓯江南北，平阳县以西的为南雁宕山，中雁宕山在乐清市西部，北雁"]}, {"name": "黄山", "en": "Huangshan", "group": "华东 East China", "coords": [30.27, 118.15], "snippets": ["）徐霞客游记（三）徐霞客游记（四）注：本书“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日", "注：本书“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记"]}, {"name": "庐山", "en": "Lushan", "group": "华中 Central China", "coords": [29.57, 115.98], "snippets": ["客游记（四）注：本书“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后", "道(6)，月伤数十人，遂止宿焉。【注释】(1)游天台山日记：《游天台山日记》、《游雁宕山日记》、《游白岳山日记》、《游黄山日记》、《游武彝山日记》、《游庐山日记》、《游黄山日记后》、《游九鲤湖日记》诸篇，皆在乾隆刻本第一册上。天台山，又省称台山，在今浙江天台县北，有华顶、赤城、琼台、桃源、寒岩、明岩诸胜景，以石梁飞"]}, {"name": "嵩山", "en": "Songshan", "group": "华北 North China", "coords": [34.52, 112.99], "snippets": ["。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游", "日六十有三，历省二，经县十九，府十一，游名山者三。【译文】这一次出游，一共六十三天，游历了两个省，经过十九个县、十一个府，游览了三座名山。游嵩山日记(1)河南河南府登封县(2)【题解】天启三年(1623)徐霞客北游嵩山、华山、太和山。《游嵩山日记》是徐霞客在河南嵩山一带旅行的游记。徐霞客于"]}, {"name": "华山", "en": "Huashan", "group": "华北 North China", "coords": [34.49, 110.08], "snippets": ["目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记", "统。第一个系统的祖本被认为是李寄本。李寄字介立，为霞客第四子，因随母育于李氏，故名寄。康熙二十三年(甲子、1684)李寄访得曹骏甫本、史夏隆本，把其中的《游太华山记》、《游颜洞记》、《盘江考》等数篇补入《滇游日记》。《名山游记》和《徐霞客西游记》也应在李寄手中合璧。康熙四十八年(己丑、1709)、四十九年(庚寅、1710", "录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记", "。第一个系统的祖本被认为是李寄本。李寄字介立，为霞客第四子，因随母育于李氏，故名寄。康熙二十三年(甲子、1684)李寄访得曹骏甫本、史夏隆本，把其中的《游太华山记》、《游颜洞记》、《盘江考》等数篇补入《滇游日记》。《名山游记》和《徐霞客西游记》也应在李寄手中合璧。康熙四十八年(己丑、1709)、四十九年(庚寅、1710"]}, {"name": "武当山", "en": "Wudang Mt.", "group": "华中 Central China", "coords": [32.41, 111.0], "snippets": ["游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记返回总目录", "了两个省，经过十九个县、十一个府，游览了三座名山。游嵩山日记(1)河南河南府登封县(2)【题解】天启三年(1623)徐霞客北游嵩山、华山、太和山。《游嵩山日记》是徐霞客在河南嵩山一带旅行的游记。徐霞客于二月初一日离家，陆行经徐州、开封等地。十九日至郑州黄宗店，参观圣僧池，后过密县游天仙院。当日进入登", "一百三十里路。游太和山日记(1)湖广襄阳府均州(2)【题解】《游太和山日记》是天启三年(1623)徐霞客游太和山留下来的游记。太和山即武当山，在今湖北丹江口市。徐霞客于三月十一日进入湖广境，十二日往南抵均州，十三日登山，沿途游遇真宫、紫霄宫、南岩、太和宫、五龙宫，览滴水、仙侣、凌虚诸岩，登绝顶天柱峰", "。山坞之中，居庐相望，沿流稻畦(4)，高下鳞次，不似山、陕间矣。但途中蹊径狭，行人稀，且闻虎暴，日方下舂，竟止坞中曹家店(5)。【注释】(1)太和山：即武当山，相传真武曾修炼于此，为道教名山，亦以传授武当派拳术著称。明永乐中尊为太岳，亦称玄岳。在湖北丹江口市南境，有72峰、36岩、24涧、11洞、10池、9井等自然风"]}, {"name": "五台山", "en": "Wutai Mt.", "group": "华北 North China", "coords": [38.97, 113.56], "snippets": ["记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记返回总目录前 言我们在这里向大家介绍我国古代杰出的旅行家和地理学家徐霞客(1587", "单位，历代庙宇、碑刻、古树荟萃。《游嵩山日记》、《游太华山日记》、《游太和山日记》、《闽游日记前》、《闽游日记后》、《游天台山日记后》、《游雁宕山日记后》、《游五台山日记》、《游恒山日记》诸篇，皆在乾隆刻本第一册下。(2)河南府：治洛阳，即今河南洛阳市。(3)髫(tiáo)年：幼年。髫，小孩子头上下垂的短发。五岳：我"]}, {"name": "恒山", "en": "Hengshan (North)", "group": "华北 North China", "coords": [39.67, 113.73], "snippets": ["后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游日记江右游日记楚游日记返回总目录前 言我们在这里向大家介绍我国古代杰出的旅行家和地理学家徐霞客(1587—1641)，", "6)枫亭：明代曾设枫亭市巡检司。今名同，在仙游县东南隅。【译文】到浙江、福建游览早已是过去的事了。我的志向在于游览四川的峨眉山、广西的桂林，以及太华山、恒山等名山；至于出游罗浮山、衡山，在其次了；到浙江的五泄、福建的九漈，又在其次了。然而四川、广西、关中等地，因母亲年老，道路遥远，未能仓猝出游；衡山、湘江等地可以顺"]}, {"name": "九鲤湖", "en": "Jiuli Lake", "group": "华东 East China", "coords": [25.02, 118.1], "snippets": ["“□”同纸书原文。目录前 言游天台山日记游雁宕山日记游白岳山日记游黄山日记游武彝山日记游庐山日记游黄山日记 后游九鲤湖日记游嵩山日记游太华山日记游太和山日记闽游日记 前闽游日记 后游天台山日记 后游雁宕山日记 后游五台山日记游恒山日记浙游", "诚敬更笃。与仲昭勒遗文，梓遗迹，复拭遗像装潢之，时致礼；先代墓碑在风雨中，皆甃而亭焉。办祭田，倡族人享祀”。他的这些工作的集中代表，就是在泰昌元年(1620)游九鲤湖后，建晴山堂。据陈仁锡《晴山堂记》，因祈梦九仙得“四月清和雨乍晴，南山当户转分明”，其母病愈，因画“晴转南山”图，并“搜草札中，磨石装帙”，成《晴山堂石刻》。他"]}, {"name": "鸡足山", "en": "Jizushan", "group": "西南 Southwest", "coords": [25.71, 100.38], "snippets": ["，文物、碑刻、年节、民俗等，都是他感兴趣的内容。他既概括了明代中原文化对边疆影响的程度，“穷徼薄海，万里同风”，又记录了具有地方民族特色的民风民俗，如十月祭先，鸡足山朝山，腾冲遇天旱则断屠迁街，青松毛铺地，喝三道茶，大理三月街等。《徐霞客游记》中记录三月街的精彩篇章仅三百多字，却容纳了三月街的诸多信息。时间是崇祯十二年(16", "死生不易，割肝相示者，独有尊公。”徐霞客与普通平民静闻的友谊是另一个例子。静闻是江阴迎福寺僧，与霞客结伴远行。他是一位虔诚的佛教僧人，刺血写《法华经》要亲自送到鸡足山供奉。他也是一位勇士，湘江遇盗，冒刃、冒寒、冒火、冒水，救出了《徐霞客游记》手稿及同船人的财物。不幸在南宁崇善寺病逝。《徐霞客游记》载：“闻静闻诀音，必窆骨鸡足"]}, {"name": "大理", "en": "Dali", "group": "西南 Southwest", "coords": [25.7, 100.18], "snippets": ["了明代中原文化对边疆影响的程度，“穷徼薄海，万里同风”，又记录了具有地方民族特色的民风民俗，如十月祭先，鸡足山朝山，腾冲遇天旱则断屠迁街，青松毛铺地，喝三道茶，大理三月街等。《徐霞客游记》中记录三月街的精彩篇章仅三百多字，却容纳了三月街的诸多信息。时间是崇祯十二年(1639)三月十五日到十九日，共五天。赶街的地点在大理古城", "茶，大理三月街等。《徐霞客游记》中记录三月街的精彩篇章仅三百多字，却容纳了三月街的诸多信息。时间是崇祯十二年(1639)三月十五日到十九日，共五天。赶街的地点在大理古城出西门西向一里半的城西演武场。街面的形象，“俱结棚为市，环错纷纭”，都是临时搭的棚子。三月街规模大，物多、人多。“十三省物无不至，滇中诸彝物亦无不至”，它是"]}, {"name": "腾冲", "en": "Tengchong", "group": "西南 Southwest", "coords": [25.02, 98.49], "snippets": ["踪十分广远，他的足迹遍及明代的两京十三布政司，相当于现今的19个省、市、自治区，可能还到过四川省和重庆市。《徐霞客游记》犹如一幅超长的宏阔画卷，东到普陀山，西到腾冲边陲，北到长城、盘山，南到罗浮山，从农村到市井，千山万壑，尽入画幅。其气势之磅礴，令人叹为观止。全书共63万字，《四库全书总目提要》说，“游记之夥，遂莫过于斯编", "、年节、民俗等，都是他感兴趣的内容。他既概括了明代中原文化对边疆影响的程度，“穷徼薄海，万里同风”，又记录了具有地方民族特色的民风民俗，如十月祭先，鸡足山朝山，腾冲遇天旱则断屠迁街，青松毛铺地，喝三道茶，大理三月街等。《徐霞客游记》中记录三月街的精彩篇章仅三百多字，却容纳了三月街的诸多信息。时间是崇祯十二年(1639)三月"]}];
+const TIMELINE = [{"date": "1613-05-19", "title_zh": "宁海出西门", "title_en": "Depart Ninghai (West Gate)", "desc_zh": "“云散日朗，人意山光，俱有喜态。”开启天台行。", "desc_en": "Fine weather and bright mountains—beginning of the Tiantai journey."}, {"date": "1613-04", "title_zh": "天台山·石梁飞瀑", "title_en": "Tiantai · Shiliang Waterfall", "desc_zh": "观“石梁卧虹，飞瀑喷雪”，登华顶峰。", "desc_en": "At Shiliang: rainbow over stone arch, snow-like spray; ascent of Huading peak."}, {"date": "1613-1615", "title_zh": "江浙闽赣行旅", "title_en": "Journeys in Jiangsu/Zhejiang/Fujian/Jiangxi", "desc_zh": "记录自然与人文，寺观、瀑布、山川层见迭出。", "desc_en": "Extensive notes on nature and culture across the southeast."}, {"date": "1638-1639", "title_zh": "黔滇考察", "title_en": "Guizhou & Yunnan expeditions", "desc_zh": "高黎贡山与滇西地貌、三月街市集与民族风俗。", "desc_en": "Gaoligong mountains, western Yunnan landforms, Dali’s March Fair & customs."}];
+
+// ====== I18N ======
+const I18N = {
+  zh: {
+    title: "《徐霞客游记》数字人文 · 增强版",
+    subtitle: "地图 · 文本 · 时间轴 · 检索 · 展示模式",
+    map_label: "交互式地图",
+    map_hint: "提示：点标记看原文片段；勾选区域筛选；“路线动画”会按序绘制主要行程。",
+    search_label: "片段检索",
+    btn_search: "检索",
+    timeline_label: "时间轴",
+    about_label: "关于本项目",
+    about_text: "本页为课程演示用 Demo。文本片段来自《徐霞客游记》（学术用途），地图基于 OpenStreetMap。后续可接入 NLP 地名抽取、自动配准与 StoryMaps。",
+    ext_label: "可扩展方向",
+    ext_text: "1) NLP 地名抽取 2) 自动经纬度配准 3) 游程重建与里程估算 4) 主题/情感可视化 5) 媒体画廊与朗读",
+    footer: "© 2025 数字人文项目组 · 数据来源：《徐霞客游记》（中华书局·朱惠荣整理本）；仅用于教学演示。",
+    btn_animate: "路线动画",
+    btn_present: "演示模式",
+    btn_reset: "重置视图"
+  },
+  en: {
+    title: "Xu Xiake’s Travelogue · DH Enhanced Demo",
+    subtitle: "Map · Text · Timeline · Search · Presentation",
+    map_label: "Interactive Map",
+    map_hint: "Tip: Click markers for excerpts; filter by regions; 'Animate Route' draws the main path in order.",
+    search_label: "Snippet Search",
+    btn_search: "Search",
+    timeline_label: "Timeline",
+    about_label: "About",
+    about_text: "This page is a course demo. Excerpts are from Xu Xiake’s Travelogue (for academic use). Map by OpenStreetMap. Future work: NLP toponyms, geocoding, StoryMaps.",
+    ext_label: "Extensions",
+    ext_text: "1) NLP toponyms 2) Auto geocoding 3) Route reconstruction 4) Topic/sentiment viz 5) Media gallery & narration",
+    footer: "© 2025 DH Project · Source: Xu Xiake’s Travelogue (Zhonghua Book Company, Zhu Huirong ed.); teaching demo only.",
+    btn_animate: "Animate Route",
+    btn_present: "Presentation Mode",
+    btn_reset: "Reset View"
+  }
+};
+
+let currentLang = "zh";
+const els = document.querySelectorAll("[data-i18n]");
+function applyLang(lang) {
+  currentLang = lang;
+  els.forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (I18N[lang][key]) el.innerHTML = I18N[lang][key];
+  });
+  document.getElementById("lang-zh").classList.toggle("active", lang==="zh");
+  document.getElementById("lang-en").classList.toggle("active", lang==="en");
+}
+document.getElementById("lang-zh").onclick = () => applyLang("zh");
+document.getElementById("lang-en").onclick = () => applyLang("en");
+
+// ====== Map Setup ======
+const map = L.map('map', { zoomControl: true }).setView([29.2, 119.9], 5);
+
+const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+const baseTerrain = L.tileLayer('https://stamen-tiles-、年节、民俗等，都是他感兴趣的内容。他既概括了明代中原文化对边疆影响的程度，“穷徼薄海，万里同风”，又记录了具有地方民族特色的民风民俗，如十月祭先，鸡足山朝山，腾冲遇天旱则断屠迁街，青松毛铺地，喝三道茶，大理三月街等。《徐霞客游记》中记录三月街的精彩篇章仅三百多字，却容纳了三月街的诸多信息。时间是崇祯十二年(1639)三月.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png', { attribution: 'Map tiles by Stamen & OSM' });
+const baseEsri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
+L.control.layers({ "OSM": baseOSM, "Terrain": baseTerrain, "Satellite": baseEsri }, null, { position:'topleft' }).addTo(map);
+
+const groupLayer = L.featureGroup().addTo(map);
+let markers = [];
+function popupContent(p) {
+  // Chinese snippets; show note in English mode
+  const note = currentLang==='en' ? '<div class="muted" style="margin:.2rem 0;">(Chinese excerpt; English UI only)</div>' : '';
+  const sn = (p.snippets||[]).map(s=>`<div class="result"><div class="muted">${s}</div></div>`).join("") || "<em>暂无片段</em>";
+  const title = currentLang==='en' ? `${p.en}` : `${p.name}`;
+  const grp = currentLang==='en' ? p.group.split(" ")[1] : p.group.split(" ")[0];
+  return `<h3 style="margin:.2rem 0;">${title}</h3><div class="muted">${grp}</div>${note}${sn}`;
+}
+
+function drawMarkers() {
+  groupLayer.clearLayers();
+  markers = [];
+  const checked = [...document.querySelectorAll('.groupchk:checked')].map(x=>x.value);
+  PLACE_DATA.forEach(p => {
+    if (!checked.includes(p.group)) return;
+    const m = L.marker(p.coords);
+    m.bindPopup(() => popupContent(p));
+    m._meta = p;
+    m.addTo(groupLayer);
+    markers.push(m);
+  });
+  if (markers.length) map.fitBounds(groupLayer.getBounds().pad(0.2));
+}
+drawMarkers();
+document.querySelectorAll('.groupchk').forEach(ch => ch.addEventListener('change', drawMarkers));
+
+// ====== Route Animation ======
+let animLine;
+document.getElementById('btn-animate').onclick = () => {
+  if (animLine) { map.removeLayer(animLine); animLine=null; }
+  // Use a simplified main route sequence (subset of markers order by a heuristic)
+  const order = ["宁海","天台山","雁荡山","黄山","庐山","嵩山","华山","武当山","五台山","恒山","九鲤湖","鸡足山","大理","腾冲"];
+  const coords = order.map(n => (PLACE_DATA.find(p => p.name===n)||{}).coords).filter(Boolean);
+  if (!coords.length) return;
+  animLine = L.polyline([], { color:'#e11d48', weight:4 }).addTo(map);
+  map.fitBounds(L.latLngBounds(coords).pad(0.2));
+  let i=0;
+  const timer = setInterval(()=>{
+    animLine.addLatLng(coords[i]);
+    i++;
+    if (i>=coords.length) clearInterval(timer);
+  }, 600);
+};
+
+// ====== Presentation Mode (cycle markers) ======
+document.getElementById('btn-present').onclick = () => {
+  if (!markers.length) return;
+  let i=0;
+  const openNext = () => {
+    const m = markers[i % markers.length];
+    map.setView(m.getLatLng(), 6, { animate:true });
+    m.openPopup();
+    i++;
+    if (i <= markers.length) setTimeout(openNext, 1600);
+  };
+  openNext();
+};
+
+// ====== Reset View ======
+document.getElementById('btn-reset').onclick = () => {
+  if (markers.length) map.fitBounds(groupLayer.getBounds().pad(0.2));
+};
+
+// ====== Search ======
+const q = document.getElementById('q');
+const results = document.getElementById('results');
+function renderResults(term) {
+  const t = term.trim().toLowerCase();
+  let html = "";
+  const matchedMarkers = [];
+  PLACE_DATA.forEach(p => {
+    const hay = (p.name + " " + p.en + " " + (p.snippets||[]).join(" ")).toLowerCase();
+    if (!t || hay.includes(t)) {
+      const title = currentLang==='en' ? p.en : p.name;
+      const sn = (p.snippets||[]).map(s => {
+        if (!t) return s;
+        return s.replace(new RegExp(t,'gi'), m=>`<span class="badge">${m}</span>`);
+      }).join(" ");
+      html += `<div class="result"><strong>${title}</strong><div class="muted">${sn||'(No snippet)'}` +
+              `${ currentLang==='en' ? ' (Chinese excerpt; English UI only)' : '' }</div></div>`;
+      const mk = markers.find(mk=>mk._meta && (mk._meta.name===p.name));
+      if (mk) matchedMarkers.push(mk);
+    }
+  });
+  results.innerHTML = html || '<div class="muted">(无匹配结果 / No match)</div>';
+  if (matchedMarkers.length) {
+    const fg = L.featureGroup(matchedMarkers);
+    map.fitBounds(fg.getBounds().pad(0.25));
+  }
+}
+document.getElementById('btn-search').onclick = () => renderResults(q.value);
+q.addEventListener('keypress', e => { if (e.key==='Enter') renderResults(q.value); });
+renderResults("");
+
+// ====== Timeline ======
+const tl = document.getElementById('timeline');
+function renderTimeline() {
+  tl.innerHTML = TIMELINE.map(ev => `
+    <div class="titem">
+      <div><strong>${ev.date}</strong> · ${currentLang==='en' ? ev.title_en : ev.title_zh}</div>
+      <div class="muted small">${currentLang==='en' ? ev.desc_en : ev.desc_zh}</div>
+    </div>
+  `).join("");
+}
+renderTimeline();
+
+// Switch language updates dynamic UI as well
+const langObserver = new MutationObserver(()=>{ renderResults(q.value); renderTimeline(); drawMarkers(); });
+langObserver.observe(document.getElementById("lang-en"), { attributes:true });
+applyLang("zh");
+</script>
+</body>
+</html>
